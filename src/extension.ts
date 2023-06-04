@@ -7,6 +7,8 @@ let openai: OpenAIApi | undefined = undefined;
 
 let commentId = 1;
 
+const base_url = 'https://azure.apiproxy.win/v1';
+
 class NoteComment implements vscode.Comment {
 	id: number;
 	label: string | undefined;
@@ -31,21 +33,22 @@ class NoteComment implements vscode.Comment {
 export async function showInputBox() {
 	const result = await vscode.window.showInputBox({
 		ignoreFocusOut: true,
-		placeHolder: 'Your OpenAI API Key',
+		placeHolder: '您的 OpenAI API Key',
 		title: 'Scribe AI',
-		prompt: 'You have not set your OpenAI API key yet or your API key is incorrect, please enter your API key to use the ScribeAI extension.',
+		prompt: '您尚未设置OpenAI API密钥,或者您的API密钥不正确,请输入API密钥以使用ScribeAI扩展。',
 		validateInput: async text => {
 			vscode.window.showInformationMessage(`Validating: ${text}`);
 			if (text === '') {
-				return 'The API Key can not be empty';
+				return 'API Key 不能为空';
 			}
 			try {
 				openai = new OpenAIApi(new Configuration({
 					apiKey: text,
+					basePath: base_url,
 				}));
 				await openai.listModels();
 			} catch(err) {
-				return 'Your API key is invalid';
+				return 'API key 不正确';
 			}
 			return null;
 		}
@@ -62,6 +65,7 @@ async function validateAPIKey() {
 	try {
 		openai = new OpenAIApi(new Configuration({
 			apiKey: vscode.workspace.getConfiguration('scribeai').get('ApiKey'),
+			basePath: base_url,
 		}));
 		await openai.listModels();
 	} catch(err) {
@@ -79,6 +83,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (openai === undefined) {
 		openai = new OpenAIApi(new Configuration({
 			apiKey: vscode.workspace.getConfiguration('scribeai').get('ApiKey'),
+			basePath: base_url,
 		}));
 	}
 
@@ -95,8 +100,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	};
 
 	commentController.options = {
-		prompt: "Ask Scribe AI...",
-		placeHolder: "Ask me anything! Example: \"Explain the above code in plain English\""
+		prompt: "询问 Scribe AI...",
+		placeHolder: "可以问我任何问题! 例如: \"用简单的英语简明扼要的中文解释上述代码\""
 	};
 
 	context.subscriptions.push(vscode.commands.registerCommand('mywiki.createNote', (reply: vscode.CommentReply) => {
@@ -106,7 +111,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('mywiki.askAI', (reply: vscode.CommentReply) => {
 		vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: "Generating AI response...",
+			title: "正在生成 AI 响应...",
 			cancellable: true
 		}, async () => {
 			await askAI(reply);		
@@ -116,7 +121,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('mywiki.aiEdit', (reply: vscode.CommentReply) => {
 		vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: "Generating AI response...",
+			title: "正在生成 AI 响应...",
 			cancellable: true
 		}, async () => {
 			await aiEdit(reply);		
@@ -126,10 +131,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('mywiki.genDocString', (reply: vscode.CommentReply) => {
 		vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: "Generating AI response...",
+			title: "正在生成 AI 响应...",
 			cancellable: true
 		}, async () => {
-			reply.text = "Write a docstring for the above code and use syntax of the coding language to format it.";
+			reply.text = "用代码语言的语法为上述代码编写文档字符串。";
 			await askAI(reply);		
 		});
 	}));
@@ -215,22 +220,25 @@ export async function activate(context: vscode.ExtensionContext) {
 	 * @returns 
 	 */
 	async function generatePromptV1(question: string, thread: vscode.CommentThread) {
-		const rolePlay =
-			"I want you to act as a highly intelligent AI chatbot that has deep understanding of any coding language and its API documentations. I will provide you with a code block and your role is to provide a comprehensive answer to any questions or requests that I will ask about the code block. Please answer in as much detail as possible and not be limited to brevity. It is very important that you provide verbose answers and answer in markdown format.";
+		//const rolePlay =
+		//	"I want you to act as a highly intelligent AI chatbot that has deep understanding of any coding language and its API documentations. I will provide you with a code block and your role is to provide a comprehensive answer to any questions or requests that I will ask about the code block. Please answer in as much detail as possible and not be limited to brevity. It is very important that you provide verbose answers and answer in markdown format.";
+		const rolePlay = 
+			"我现在将作为一个高度智能的AI聊天机器人,对任何编码语言及其API文档有深入的理解。我将提供一段代码,您的角色是对我提出的任何与代码块相关的问题或请求提供全面且详细的答案。请尽可能详细地回答,不要求简洁。提供详尽的答案并以Markdown格式回答非常重要。";
+			
 		const codeBlock = await getCommentThreadCode(thread);
 		
-		let conversation = "Human: Who are you?\n\nAI: I am a intelligent AI chatbot\n\n";
+		let conversation = "人类: 你是谁?\n\nAI: 我是AI机器人。\n\n";
 		
 		const filteredComments = thread.comments.filter(comment => comment.label !== "NOTE");
 
 		for (let i = Math.max(0, filteredComments.length - 8); i < filteredComments.length; i++) {
 				if (filteredComments[i].author.name === "VS Code") {
-					conversation += `Human: ${(filteredComments[i].body as vscode.MarkdownString).value}\n\n`;
+					conversation += `人类: ${(filteredComments[i].body as vscode.MarkdownString).value}\n\n`;
 				} else if (filteredComments[i].author.name === "Scribe AI") {
 					conversation += `AI: ${(filteredComments[i].body as vscode.MarkdownString).value}\n\n`;
 				}
 		}
-		conversation += `Human: ${question}\n\nAI: `;
+		conversation += `人类: ${question}\n\nAI: `;
 
 		return rolePlay + "\n```\n" + codeBlock + "\n```\n\n\n" + conversation; 
 	}
@@ -248,13 +256,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	 */
 	async function generatePromptChatGPT(question: string, thread: vscode.CommentThread) {
 		const messages: ChatCompletionRequestMessage[] = [];
-		const rolePlay =
-			"I want you to act as a highly intelligent AI chatbot that has deep understanding of any coding language and its API documentations. I will provide you with a code block and your role is to provide a comprehensive answer to any questions or requests that I will ask about the code block. Please answer in as much detail as possible and not be limited to brevity. It is very important that you provide verbose answers and answer in markdown format.";
+		//const rolePlay =
+		//	"I want you to act as a highly intelligent AI chatbot that has deep understanding of any coding language and its API documentations. I will provide you with a code block and your role is to provide a comprehensive answer to any questions or requests that I will ask about the code block. Please answer in as much detail as possible and not be limited to brevity. It is very important that you provide verbose answers and answer in markdown format.";
+		const rolePlay = 
+			"我现在将作为一个高度智能的AI聊天机器人,对任何编码语言及其API文档有深入的理解。我将提供一段代码,您的角色是对我提出的任何与代码块相关的问题或请求提供全面且详细的答案。请尽可能详细地回答,不要求简洁。提供详尽的答案并以Markdown格式回答非常重要。";
+		
 		const codeBlock = await getCommentThreadCode(thread);
 		
 		messages.push({"role" : "system", "content" : rolePlay + "\nCode:\n```\n" + codeBlock + "\n```"});
-		messages.push({"role" : "user", "content" : "Who are you?"});
-		messages.push({"role" : "assistant", "content" : "I am a intelligent and helpful AI chatbot."});
+		messages.push({"role" : "user", "content" : "你是谁?"});
+		messages.push({"role" : "assistant", "content" : "我是AI机器人。"});
 
 		const filteredComments = thread.comments.filter(comment => comment.label !== "NOTE");
 
@@ -284,15 +295,20 @@ export async function activate(context: vscode.ExtensionContext) {
 	 * @returns 
 	 */
 	function generatePromptV2(question: string, thread: vscode.CommentThread) {
-		const rolePlay =
+		/*const rolePlay =
 			"I want you to act as a highly intelligent AI chatbot that has deep understanding of any coding language and its API documentations. "
 			+ "I will provide you with a code block and your role is to provide a comprehensive answer to any questions or requests that I will ask about the code block. Please answer in as much detail as possible and not be limited to brevity. It is very important that you provide verbose answers. (When responding to the following prompt, please make sure to properly style your response using Github Flavored Markdown."
 			+ " Use markdown syntax for things like headings, lists, colored text, code blocks, highlights etc. Make sure not to mention markdown or stying in your actual response."
-			+ " Try to write code inside a single code block if possible)";
-		const codeBlock = getCommentThreadCode(thread);
+			+ " Try to write code inside a single code block if possible)";*/
+		const rolePlay = 
+			"我希望你作为一个高度智能的AI聊天机器人,对任何编码语言及其API文档有深入的理解。 "
+			+ "我将提供一段代码,你的角色是对我提出的任何与代码块相关的问题或请求提供全面且详细的答案。请尽可能详细地回答,不要求简洁。提供详尽的答案非常重要。(回应以下提示时,请确保使用Github Flavored Markdown properbly样式化您的回答。)"
+			+ " 使用markdown语法进行标题、列表、彩色文本、代码块、高亮等样式。确保在实际回复中不提到markdown或样式。 "
+			+ " 如果可能的话,尽量在单个代码块中编写代码。";
+			const codeBlock = getCommentThreadCode(thread);
 		
-		let conversation = "Human: Who are you?\n\nAI: I am a intelligent AI chatbot\n\n";
-		conversation += `Human: ${question}\n\nAI: `;
+		let conversation = "人类: 你是谁?\n\nAI: 我是AI机器人\n\n";
+		conversation += `人类: ${question}\n\nAI: `;
 		return rolePlay + "\n" + codeBlock + "\n\n\n" + conversation; 
 	}
 
@@ -350,7 +366,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				presence_penalty: 1,
 			});
 
-			const responseText = response.data.choices[0].message?.content ? response.data.choices[0].message?.content : 'An error occured. Please try again...';
+			const responseText = response.data.choices[0].message?.content ? response.data.choices[0].message?.content : '发生错误. 请重试...';
 			const AIComment = new NoteComment(new vscode.MarkdownString(responseText.trim()), vscode.CommentMode.Preview, { name: 'Scribe AI', iconPath: vscode.Uri.parse("https://img.icons8.com/fluency/96/null/chatbot.png") }, thread, thread.comments.length ? 'canDelete' : undefined);
 			thread.comments = [...thread.comments, AIComment];
 		} else {
@@ -363,10 +379,10 @@ export async function activate(context: vscode.ExtensionContext) {
 				top_p: 1.0,
 				frequency_penalty: 1,
 				presence_penalty: 1,
-				stop: ["Human:"],  // V1: "Human:"
+				stop: ["人类:"],  // V1: "Human:"
 			});
 
-			const responseText = response.data.choices[0].text ? response.data.choices[0].text : 'An error occured. Please try again...';
+			const responseText = response.data.choices[0].text ? response.data.choices[0].text : '发生错误. 请重试...';
 			const AIComment = new NoteComment(new vscode.MarkdownString(responseText.trim()), vscode.CommentMode.Preview, { name: 'Scribe AI', iconPath: vscode.Uri.parse("https://img.icons8.com/fluency/96/null/chatbot.png") }, thread, thread.comments.length ? 'canDelete' : undefined);
 			thread.comments = [...thread.comments, AIComment];
 		}
@@ -398,7 +414,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 
 		const response = await openai.createEdit({
-			model: "code-davinci-edit-001",
+			//model: "code-davinci-edit-001",
+			model: "code-davinci-002",
 			input: code,
 			instruction: question,
 			temperature: 0,
@@ -413,7 +430,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				editBuilder.replace(thread.range, response.data.choices[0].text + "");
 			});
 		} else {
-			vscode.window.showErrorMessage('An error occured. Please try again...');
+			vscode.window.showErrorMessage('发生错误. 请重试...');
 		}
 	}
 
