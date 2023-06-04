@@ -9,7 +9,7 @@
 	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/ajikan/ScribeAI"
+		"url": "https://github.com/colin4k/ScribeAI"
 	},
 	"engines": {
 		"vscode": "^1.65.0"
@@ -208,7 +208,13 @@
 					"type": "string",
 					"default": "",
 					"scope": "application",
-					"markdownDescription": "Your personal OpenAI API key. If you don't have one, generate a new one [here](https://beta.openai.com/account/api-keys).\n\nDon't forget to [restart your extension](command:workbench.action.reloadWindow) once you finished configuring so that your extension gets loaded with the new configurations."
+					"markdownDescription": "你的个人OpenAI API key. 如果你没有, 需要创建一个 [这里](https://beta.openai.com/account/api-keys).\n\n不要忘记 [重启你的扩展](command:workbench.action.reloadWindow) 一旦您完成配置,您的扩展会使用新配置加载。"
+				},
+				"scribeai.ApiBaseUrl": {
+					"type": "string",
+					"default": "https://api.openai.com/v1",
+					"scope": "application",
+					"markdownDescription": "你的个人自定义URL。"
 				},
 				"scribeai.models": {
 					"type": "string",
@@ -219,11 +225,11 @@
 						"gpt-4"
 					],
 					"enumDescriptions": [
-						"GPT-3 models can understand and generate natural language.",
-						"Large language model trained by OpenAI that is optimized for dialogue.",
-						"Large language model that performs better than ChatGPT. Only available for people that have access to GPT4."
+						"GPT-3 模型能够理解和生成通用语言.",
+						"由OpenAI训练的大型语言模型,优化用于对话。",
+						"一体化的大语言模型超越了ChatGPT的性能。仅适用于拥有GPT4访问权限的人员。"
 					],
-					"markdownDescription": "Choose the OpenAI model you want to use for generating your AI responses.\n\nYou can find more details about each model and their pricing [here](https://beta.openai.com/docs/models)."
+					"markdownDescription": "选择您要用于生成AI响应的OpenAI模型。\n\n您可以找到有关每个模型及其定价的更多详细信息 [这里](https://beta.openai.com/docs/models)."
 				}
 			}
 		}
