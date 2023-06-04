@@ -1,11 +1,10 @@
 'use strict';
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.activate = exports.showInputBoxUrl = exports.showInputBox = void 0;
+exports.activate = exports.showInputBox = void 0;
 const vscode = require("vscode");
 const openai_1 = require("openai");
 let openai = undefined;
 let commentId = 1;
-//const base_url = 'https://xxx.xxx.xxx/v1';
 class NoteComment {
     constructor(body, mode, author, parent, contextValue) {
         this.body = body;
@@ -25,75 +24,46 @@ class NoteComment {
 async function showInputBox() {
     const result = await vscode.window.showInputBox({
         ignoreFocusOut: true,
-        placeHolder: '您的 OpenAI API Key',
+        placeHolder: '您的 OpenAI API Key 和 OpenAI API Base Url',
         title: 'Scribe AI',
-        prompt: '您尚未设置OpenAI API密钥,或者您的API密钥不正确,请输入API密钥以使用ScribeAI扩展。',
+        prompt: '请依次输入您的OpenAI API Key和OpenAI API Base Url，并用半角分号(:)分隔。',
         validateInput: async (text) => {
             vscode.window.showInformationMessage(`Validating: ${text}`);
             if (text === '') {
-                return 'API Key 不能为空';
+                return '输入不能为空';
             }
             try {
+                const inputs = text.split(':');
+                if (inputs[0] === '') {
+                    return 'API Key 不能为空';
+                }
+                let _basePath = vscode.workspace.getConfiguration('scribeai').get('ApiBaseUrl');
+                if (inputs[1] != '') {
+                    _basePath = inputs[1];
+                }
                 openai = new openai_1.OpenAIApi(new openai_1.Configuration({
-                    apiKey: text,
-                    basePath: vscode.workspace.getConfiguration('scribeai').get('ApiBaseUrl'),
+                    apiKey: inputs[0],
+                    basePath: inputs[1] === '' ? vscode.workspace.getConfiguration('scribeai').get('ApiBaseUrl') : inputs[1],
                 }));
                 await openai.listModels();
             }
             catch (err) {
-                return 'API key 不正确';
+                return 'API key 或者 API Base Url 不正确';
             }
             return null;
         }
     });
     vscode.window.showInformationMessage(`Got: ${result}`);
     // Write to user settings
-    await vscode.workspace.getConfiguration('scribeai').update('ApiKey', result, true);
+    if (result) {
+        await vscode.workspace.getConfiguration('scribeai').update('ApiKey', result.split(':')[0], true);
+        await vscode.workspace.getConfiguration('scribeai').update('ApiBaseUrl', result.split(':')[1], true);
+    }
     // Write to workspace settings
     //await vscode.workspace.getConfiguration('scribeai').update('ApiKey', result, false);
     return result;
 }
 exports.showInputBox = showInputBox;
-/**
- * Shows an input box for getting API Base Url using window.showInputBoxUrl().
- * Checks if inputted API Base Url is valid.
- * Updates the User Settings API Base Url with the newly inputted API Base Url.
- */
-async function showInputBoxUrl() {
-    const result = await vscode.window.showInputBox({
-        ignoreFocusOut: true,
-        placeHolder: '您的 OpenAI API Base Url',
-        title: 'Scribe AI',
-        prompt: '您可以使用默认的OpenAI API Base Url，也可以设置为您自己的Url。',
-        validateInput: async (text) => {
-            vscode.window.showInformationMessage(`Validating: ${text}`);
-            if (text === '') {
-                return 'API Base Url 不能为空';
-            }
-            if (vscode.workspace.getConfiguration('scribeai').get('ApiKey') === '') {
-                return 'API Key 不能为空，请先设置API Key，再设置API Base Url';
-            }
-            try {
-                openai = new openai_1.OpenAIApi(new openai_1.Configuration({
-                    apiKey: vscode.workspace.getConfiguration('scribeai').get('ApiKey'),
-                    basePath: text,
-                }));
-                await openai.listModels();
-            }
-            catch (err) {
-                return 'API Base Url 不正确';
-            }
-            return null;
-        }
-    });
-    vscode.window.showInformationMessage(`Got: ${result}`);
-    // Write to user settings
-    await vscode.workspace.getConfiguration('scribeai').update('ApiBaseUrl', result, true);
-    // Write to workspace settings
-    //await vscode.workspace.getConfiguration('scribeai').update('ApiKey', result, false);
-    return result;
-}
-exports.showInputBoxUrl = showInputBoxUrl;
 async function validateAPIKey() {
     try {
         openai = new openai_1.OpenAIApi(new openai_1.Configuration({
@@ -112,10 +82,6 @@ async function activate(context) {
     if (vscode.workspace.getConfiguration('scribeai').get('ApiKey') === ""
         || !(await validateAPIKey())) {
         const apiKey = await showInputBox();
-    }
-    if (vscode.workspace.getConfiguration('scribeai').get('ApiBaseUrl') === ""
-        || !(await validateAPIKey())) {
-        const apiBaseUrl = await showInputBoxUrl();
     }
     if (openai === undefined) {
         openai = new openai_1.OpenAIApi(new openai_1.Configuration({
@@ -349,6 +315,7 @@ async function activate(context) {
             }
             openai = new openai_1.OpenAIApi(new openai_1.Configuration({
                 apiKey: vscode.workspace.getConfiguration('scribeai').get('ApiKey'),
+                basePath: vscode.workspace.getConfiguration('scribeai').get('ApiBaseUrl'),
             }));
         }
         if (model === "ChatGPT" || model === "gpt-4") {
@@ -402,6 +369,7 @@ async function activate(context) {
             }
             openai = new openai_1.OpenAIApi(new openai_1.Configuration({
                 apiKey: vscode.workspace.getConfiguration('scribeai').get('ApiKey'),
+                basePath: vscode.workspace.getConfiguration('scribeai').get('ApiBaseUrl'),
             }));
         }
         const response = await openai.createEdit({
