@@ -232,7 +232,38 @@ async function activate(context) {
         const messages = [];
         //const rolePlay =
         //	"I want you to act as a highly intelligent AI chatbot that has deep understanding of any coding language and its API documentations. I will provide you with a code block and your role is to provide a comprehensive answer to any questions or requests that I will ask about the code block. Please answer in as much detail as possible and not be limited to brevity. It is very important that you provide verbose answers and answer in markdown format.";
-        const rolePlay = "我现在将作为一个高度智能的AI聊天机器人,对任何编码语言及其API文档有深入的理解。我将提供一段代码,您的角色是对我提出的任何与代码块相关的问题或请求提供全面且详细的答案。请尽可能详细地回答,不要求简洁。提供详尽的答案并以Markdown格式回答非常重要。";
+        const rolePlay = "你将作为一个高度智能的AI聊天机器人,对任何编码语言及其API文档有深入的理解。我将提供一段代码,你的角色是对我提出的任何与代码块相关的问题或请求提供全面且详细的答案。请尽可能详细地回答,不要求简洁。提供详尽的答案并以Markdown格式回答非常重要。";
+        const codeBlock = await getCommentThreadCode(thread);
+        messages.push({ "role": "system", "content": rolePlay + "\nCode:\n```\n" + codeBlock + "\n```" });
+        messages.push({ "role": "user", "content": "你是谁?" });
+        messages.push({ "role": "assistant", "content": "我是AI机器人。" });
+        const filteredComments = thread.comments.filter(comment => comment.label !== "NOTE");
+        for (let i = Math.max(0, filteredComments.length - 8); i < filteredComments.length; i++) {
+            if (filteredComments[i].author.name === "VS Code") {
+                messages.push({ "role": "user", "content": `${filteredComments[i].body.value}` });
+            }
+            else if (filteredComments[i].author.name === "Scribe AI") {
+                messages.push({ "role": "assistant", "content": `${filteredComments[i].body.value}` });
+            }
+        }
+        messages.push({ "role": "user", "content": `${question}` });
+        return messages;
+    }
+    /**
+     * Generates the prompt to pass to OpenAI ChatGPT API.
+     * Prompt includes:
+     * - Role play text that gives context to AI
+     * - Code block highlighted for the comment thread
+     * - All of past conversation history + example conversation
+     * - User's new question
+     * @param question
+     * @param thread
+     * @param reply
+     * @returns
+     */
+    async function generateCodeChatGPT(question, thread, reply) {
+        const messages = [];
+        const rolePlay = "你将作为一个高度智能的AI聊天机器人,对任何编码语言及其API文档有深入的理解。我将提供一段代码,你的角色是根据我的要求对代码进行改写。请只提供代码以及必要的注释，不要做其他任何解释说明。提供详尽的代码并以Markdown格式回答非常重要。";
         const codeBlock = await getCommentThreadCode(thread);
         messages.push({ "role": "system", "content": rolePlay + "\nCode:\n```\n" + codeBlock + "\n```" });
         messages.push({ "role": "user", "content": "你是谁?" });
@@ -359,8 +390,16 @@ async function activate(context) {
      */
     async function aiEdit(reply) {
         const question = reply.text.trim();
-        const code = await getCommentThreadCode(reply.thread);
         const thread = reply.thread;
+        const model = vscode.workspace.getConfiguration('scribeai').get('models') + "";
+        let chatGPTPrompt = [];
+        let prompt = "";
+        if (model === "ChatGPT" || model === "gpt-4") {
+            chatGPTPrompt = await generateCodeChatGPT(question, thread, reply);
+        }
+        else {
+            prompt = await generatePromptV1(question, thread);
+        }
         // If openai is not initialized initialize it with existing API Key 
         // or if doesn't exist then ask user to input API Key.
         if (openai === undefined) {
@@ -372,25 +411,27 @@ async function activate(context) {
                 basePath: vscode.workspace.getConfiguration('scribeai').get('ApiBaseUrl'),
             }));
         }
-        const response = await openai.createEdit({
-            //model: "code-davinci-edit-001",
-            model: "code-davinci-002",
-            input: code,
-            instruction: question,
+        const response = await openai.createChatCompletion({
+            model: (model === "ChatGPT" ? "gpt-3.5-turbo" : "gpt-4"),
+            messages: chatGPTPrompt,
             temperature: 0,
+            max_tokens: 1000,
             top_p: 1.0,
+            frequency_penalty: 1,
+            presence_penalty: 1,
         });
-        if (response.data.choices[0].text) {
+        const responseText = response.data.choices[0].message?.content ? response.data.choices[0].message?.content : '发生错误. 请重试...';
+        if (responseText != '发生错误. 请重试...') {
             const editor = await vscode.window.showTextDocument(thread.uri);
             if (!editor) {
                 return; // No open text editor
             }
             editor.edit(editBuilder => {
-                editBuilder.replace(thread.range, response.data.choices[0].text + "");
+                editBuilder.replace(thread.range, responseText + "");
             });
         }
         else {
-            vscode.window.showErrorMessage('发生错误. 请重试...');
+            vscode.window.showErrorMessage(responseText);
         }
     }
     /**
