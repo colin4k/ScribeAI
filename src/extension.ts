@@ -7,7 +7,7 @@ let openai: OpenAIApi | undefined = undefined;
 
 let commentId = 1;
 
-const base_url = 'https://azure.apiproxy.win/v1';
+const base_url = 'https://xxx.xxx.xxx/v1';
 
 class NoteComment implements vscode.Comment {
 	id: number;
